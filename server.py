@@ -5,78 +5,142 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Configuration de la base de données
 DB_CONFIG = {
-    'host': '88.198.97.253',  # Modifier selon votre configuration
-    'user': 'admin',  # Modifier avec votre utilisateur MySQL
-    'password': 'root',  # Modifier avec votre mot de passe MySQL
-    'database': 'nmap_results_db'  # Modifier avec le nom de votre base
+    'host': '88.198.97.253',
+    'user': 'admin',
+    'password': 'root',
+    'database': 'nmap_results_db'
 }
 
-# Fonction pour établir une connexion à la base de données
 def get_db_connection():
     try:
-        connection = mysql.connector.connect(**DB_CONFIG)
-        return connection
+        return mysql.connector.connect(**DB_CONFIG)
     except Error as e:
-        print(f"Erreur de connexion à la base de données: {e}")
+        print(f"[DB ERROR] {e}")
         return None
 
-# Route pour ajouter une sonde
 @app.route('/', methods=['POST'])
-def add_probe():
+def manage_probe():
     action = request.args.get('action')
+
     if action == 'add':
         name = request.form.get('name')
         ip = request.form.get('ip')
-        status = request.form.get('status', 'active')  # Par défaut "active"
+        status = request.form.get('status', 'active')
 
         if not name or not ip:
             return jsonify({'success': False, 'message': 'Nom et IP requis'}), 400
 
         try:
-            connection = get_db_connection()
-            if connection is None:
-                return jsonify({'success': False, 'message': 'Erreur de connexion à la base de données'}), 500
+            conn = get_db_connection()
+            if conn is None:
+                return jsonify({'success': False, 'message': 'Erreur de connexion BDD'}), 500
 
-            cursor = connection.cursor()
-            query = """INSERT INTO sondes (name, ip, status, last_seen) VALUES (%s, %s, %s, %s)"""
-            cursor.execute(query, (name, ip, status, datetime.now()))
-            connection.commit()
-
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO sondes (name, ip, status, last_seen) VALUES (%s, %s, %s, %s)",
+                (name, ip, status, datetime.now())
+            )
+            conn.commit()
             probe_id = cursor.lastrowid
             cursor.close()
-            connection.close()
+            conn.close()
 
             return jsonify({'success': True, 'id': probe_id}), 200
 
         except Error as e:
-            print(f"Erreur lors de l'insertion dans la base de données: {e}")
-            return jsonify({'success': False, 'message': 'Erreur lors de l\'ajout de la sonde'}), 500
-    
+            print(f"[INSERT ERROR] {e}")
+            return jsonify({'success': False, 'message': 'Erreur lors de l\'ajout'}), 500
+
+    elif action == 'update':
+        probe_id = request.form.get('id')
+        name = request.form.get('name')
+        ip = request.form.get('ip')
+        status = request.form.get('status')
+
+        if not probe_id or not name or not ip:
+            return jsonify({'success': False, 'message': 'ID, nom et IP requis'}), 400
+
+        try:
+            conn = get_db_connection()
+            if conn is None:
+                return jsonify({'success': False, 'message': 'Erreur de connexion BDD'}), 500
+
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE sondes SET name=%s, ip=%s, status=%s, last_seen=%s WHERE id=%s",
+                (name, ip, status, datetime.now(), probe_id)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            return jsonify({'success': True, 'message': 'Sonde mise à jour'}), 200
+
+        except Error as e:
+            print(f"[UPDATE ERROR] {e}")
+            return jsonify({'success': False, 'message': 'Erreur mise à jour'}), 500
+
+    elif action == 'ping':
+        probe_id = request.form.get('id')
+        if not probe_id:
+            return jsonify({'success': False, 'message': 'ID manquant'}), 400
+
+        try:
+            conn = get_db_connection()
+            if conn is None:
+                return jsonify({'success': False, 'message': 'Erreur de connexion BDD'}), 500
+
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE sondes SET last_seen=%s WHERE id=%s",
+                (datetime.now(), probe_id)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            return jsonify({'success': True, 'reachable': True}), 200
+
+        except Error as e:
+            print(f"[PING ERROR] {e}")
+            return jsonify({'success': False, 'message': 'Erreur ping'}), 500
+
     return jsonify({'success': False, 'message': 'Action invalide'}), 400
 
-# Route pour récupérer les sondes enregistrées
 @app.route('/', methods=['GET'])
-def get_probes():
+def get_probe():
     action = request.args.get('action')
     if action == 'get':
+        probe_id = request.args.get('id')
+
         try:
-            connection = get_db_connection()
-            if connection is None:
-                return jsonify({'success': False, 'message': 'Erreur de connexion à la base de données'}), 500
+            conn = get_db_connection()
+            if conn is None:
+                return jsonify({'success': False, 'message': 'Erreur de connexion BDD'}), 500
 
-            cursor = connection.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM sondes")
-            sondes = cursor.fetchall()
-            connection.close()
+            cursor = conn.cursor(dictionary=True)
 
-            return jsonify({'success': True, 'data': sondes}), 200 if sondes else (jsonify({'success': False, 'message': 'Aucune sonde trouvée'}), 404)
-        
+            if probe_id:
+                cursor.execute("SELECT * FROM sondes WHERE id = %s", (probe_id,))
+                probe = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if probe:
+                    return jsonify({'success': True, 'probe': probe}), 200
+                else:
+                    return jsonify({'success': False, 'message': 'Sonde introuvable'}), 404
+            else:
+                cursor.execute("SELECT * FROM sondes")
+                sondes = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'data': sondes}), 200
+
         except Error as e:
-            print(f"Erreur lors de la récupération des sondes: {e}")
-            return jsonify({'success': False, 'message': 'Erreur lors de la récupération des sondes'}), 500
-    
+            print(f"[GET ERROR] {e}")
+            return jsonify({'success': False, 'message': 'Erreur récupération'}), 500
+
     return jsonify({'message': 'Bienvenue sur l\'API probes'}), 200
 
 if __name__ == '__main__':
