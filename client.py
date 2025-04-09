@@ -304,79 +304,38 @@ class HarvesterApp:
             
             # Scanner les ports pour chaque hôte
             for i, host in enumerate(nm.all_hosts()):
+                self.update_text_widget(f"Scan de l'hôte {i+1}/{total_hosts}: {host}\n")
+                
+                # Création de la structure pour les données de l'hôte
+                host_data = {
+                    'ip': host,
+                    'hostname': nm[host].hostname() if 'hostname' in nm[host] else "",
+                    'ports': []
+                }
+                
+                # Scan des ports pour cet hôte
                 try:
-                    self.update_text_widget(f"Scan de l'hôte {i+1}/{total_hosts}: {host}\n")
-                    
-                    # Création de la structure pour les données de l'hôte
-                    hostname = ""
-                    try:
-                        hostname = nm[host].hostname() if 'hostname' in nm[host] else ""
-                    except:
-                        hostname = ""
-                    
-                    host_data = {
-                        'ip': host,
-                        'hostname': hostname,
-                        'ports': []
-                    }
-                    
-                    # Scan des ports pour cet hôte (dans un bloc try séparé)
-                    try:
-                        # Nouveau scan pour cet hôte spécifique
-                        port_scan = nmap.PortScanner()
-                        port_scan.scan(hosts=host, arguments=port_args)
-                        
-                        # Vérification si l'hôte est dans les résultats
-                        if host in port_scan.all_hosts():
-                            host_info = port_scan[host]
+                    nm.scan(hosts=host, arguments=port_args)
+                    for proto in nm[host].all_protocols():
+                        lport = sorted(nm[host][proto].keys())
+                        for port in lport:
+                            service = nm[host][proto][port]['name']
+                            state = nm[host][proto][port]['state']
+                            port_info = {
+                                'port': port,
+                                'protocol': proto,
+                                'service': service,
+                                'state': state
+                            }
+                            host_data['ports'].append(port_info)
                             
-                            # Vérification des protocoles disponibles
-                            available_protocols = host_info.all_protocols()
-                            if available_protocols:
-                                for proto in available_protocols:
-                                    # Vérification si le protocole existe et contient des ports
-                                    if proto in host_info and host_info[proto]:
-                                        lport = sorted(host_info[proto].keys())
-                                        for port in lport:
-                                            try:
-                                                port_info = host_info[proto][port]
-                                                service = port_info.get('name', '')
-                                                state = port_info.get('state', '')
-                                                
-                                                # Ajouter seulement si le port est ouvert
-                                                if state == 'open':
-                                                    port_data = {
-                                                        'port': port,
-                                                        'protocol': proto,
-                                                        'service': service,
-                                                        'state': state
-                                                    }
-                                                    host_data['ports'].append(port_data)
-                                                    
-                                                    # Affichage en temps réel
-                                                    self.update_text_widget(f"  - Port {port}/{proto}: {service} ({state})\n")
-                                            except Exception as port_err:
-                                                logging.error(f"Erreur lors du traitement du port {port}: {port_err}")
-                                    else:
-                                        self.update_text_widget(f"  - Aucun port détecté pour le protocole {proto}\n")
-                            else:
-                                self.update_text_widget("  - Aucun protocole détecté pour cet hôte\n")
-                        else:
-                            self.update_text_widget("  - Aucun port ouvert détecté sur cet hôte\n")
-                    
-                    except Exception as scan_err:
-                        logging.error(f"Erreur lors du scan des ports de l'hôte {host}: {scan_err}")
-                        self.update_text_widget(f"  - Erreur lors du scan des ports: {scan_err}\n")
-                    
-                    # Ajouter les données de l'hôte aux résultats
-                    scan_results[host] = host_data
-                    self.update_text_widget(f"  Terminé: {len(host_data['ports'])} ports trouvés\n\n")
-                    
-                except Exception as host_err:
-                    logging.error(f"Erreur lors du traitement de l'hôte {host}: {host_err}")
-                    self.update_text_widget(f"  - Erreur lors du traitement de l'hôte: {host_err}\n\n")
-                    # Créer tout de même une entrée vide pour cet hôte
-                    scan_results[host] = {'ip': host, 'hostname': '', 'ports': []}
+                            # Affichage en temps réel
+                            self.update_text_widget(f"  - Port {port}/{proto}: {service} ({state})\n")
+                except Exception as e:
+                    self.update_text_widget(f"  - Erreur lors du scan des ports: {e}\n")
+                
+                scan_results[host] = host_data
+                self.update_text_widget(f"  Terminé: {len(host_data['ports'])} ports trouvés\n\n")
             
             # Enregistrement des résultats
             self.scan_results = scan_results
@@ -654,15 +613,15 @@ class HarvesterApp:
 
     def save_probe_id(self, probe_id):
         try:
-            with open('../probe_config.json', 'w') as f:
+            with open('./Services/probe_config.json', 'w') as f:
                 json.dump({'probe_id': probe_id}, f)
         except Exception as e:
             logging.error(f"Erreur lors de la sauvegarde de l'ID de la sonde: {e}")
 
     def load_probe_id(self):
         try:
-            if os.path.exists('../probe_config.json'):
-                with open('../probe_config.json', 'r') as f:
+            if os.path.exists('./Services/probe_config.json'):
+                with open('./Services/probe_config.json', 'r') as f:
                     config = json.load(f)
                     probe_id = config.get('probe_id')
                     if probe_id:
@@ -960,4 +919,4 @@ if __name__ == "__main__":
         logging.critical(f"Erreur critique de l'application: {e}")
         messagebox.showerror("Erreur critique", f"Une erreur critique est survenue: {e}")
 
-# test 5
+# test 2
