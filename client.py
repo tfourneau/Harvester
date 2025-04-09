@@ -59,8 +59,7 @@ class HarvesterApp:
         self.load_network_interfaces()
         
         # Enregistrement de la sonde au démarrage
-        self.register_probe()
-        
+        self.initialize_probe()
         # Configuration des styles
         self.configure_styles()
         
@@ -443,6 +442,45 @@ class HarvesterApp:
             logging.error(f"Erreur lors de l'enregistrement de la sonde: {e}")
             self.status_var.set("Erreur d'enregistrement")
             messagebox.showerror("Erreur", f"Impossible d'enregistrer la sonde: {e}")
+        
+            
+    def initialize_probe(self):
+        """Initialise la sonde : récupère ou enregistre automatiquement si nécessaire."""
+        probe_id = self.load_probe_id()
+
+        if probe_id:
+            try:
+                self.status_var.set("Chargement de la sonde...")
+                response = requests.get(f"{self.server_url}?action=get&id={probe_id}", timeout=10)
+                response.raise_for_status()
+                json_resp = response.json()
+
+                if json_resp.get('success') and json_resp.get('probe'):
+                    probe = json_resp['probe']
+                    self.probe_id_var.set(str(probe_id))
+                    self.probe_status_var.set(probe.get('status', 'inconnu'))
+                    self.status_var.set("Sonde existante chargée")
+                    self.send_probe_status()
+                    return
+                else:
+                    self.status_var.set("Sonde absente du serveur, enregistrement...")
+                    self.delete_probe_id()
+
+            except Exception as e:
+                logging.error(f"Erreur récupération sonde: {e}")
+                self.status_var.set("Erreur récupération, enregistrement automatique")
+
+        # Aucun ID local ou récupération impossible → on enregistre une nouvelle
+        try:
+            hostname = socket.gethostname()
+            ip = socket.gethostbyname(hostname)
+            self.add_new_probe(hostname, ip)
+        except Exception as e:
+            logging.error(f"Erreur enregistrement automatique: {e}")
+            self.status_var.set("Erreur à l'enregistrement")
+
+
+
 
     def add_new_probe(self, name, ip):
         try:
@@ -540,7 +578,7 @@ class HarvesterApp:
                 self.status_var.set(f"Statut envoyé: {status}")
             else:
                 error_msg = json_resp.get('message', 'Erreur inconnue')
-                self.status_var.set(f"Échec: {error_msg}")
+                self.status_var.set(f"Échec test: {error_msg}")
                 
             return json_resp.get('success', False)
                 
@@ -575,15 +613,15 @@ class HarvesterApp:
 
     def save_probe_id(self, probe_id):
         try:
-            with open('probe_config.json', 'w') as f:
+            with open('./Services/probe_config.json', 'w') as f:
                 json.dump({'probe_id': probe_id}, f)
         except Exception as e:
             logging.error(f"Erreur lors de la sauvegarde de l'ID de la sonde: {e}")
 
     def load_probe_id(self):
         try:
-            if os.path.exists('probe_config.json'):
-                with open('probe_config.json', 'r') as f:
+            if os.path.exists('./Services/probe_config.json'):
+                with open('./Services/probe_config.json', 'r') as f:
                     config = json.load(f)
                     probe_id = config.get('probe_id')
                     if probe_id:
@@ -875,3 +913,5 @@ if __name__ == "__main__":
     except Exception as e:
         logging.critical(f"Erreur critique de l'application: {e}")
         messagebox.showerror("Erreur critique", f"Une erreur critique est survenue: {e}")
+
+# test
