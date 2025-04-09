@@ -1,1 +1,137 @@
+name: Harvester CI/CD
 
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *'  # Exécution quotidienne à minuit
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install -r requirements.txt
+      - name: Run tests
+        run: |
+          pytest
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create sync script
+        run: |
+          cat > sync_harvester.py << 'EOL'
+          #!/usr/bin/env python3
+          import os
+          import sys
+          import shutil
+          import subprocess
+          import logging
+          from datetime import datetime
+          
+          logging.basicConfig(
+              level=logging.INFO,
+              format='%(asctime)s - %(levelname)s - %(message)s',
+              handlers=[logging.StreamHandler(), logging.FileHandler('harvester_sync.log')]
+          )
+          logger = logging.getLogger('harvester_sync')
+          
+          def execute_command(command):
+              logger.info(f"Exécution: {' '.join(command)}")
+              try:
+                  result = subprocess.run(command, check=True, text=True, capture_output=True)
+                  return result.stdout
+              except subprocess.CalledProcessError as e:
+                  logger.error(f"Erreur: {e.stderr}")
+                  raise
+          
+          def sync_repo():
+              app_dir = os.environ.get('APP_DIR', '/opt/harvester')
+              repo_url = os.environ.get('REPO_URL', 'https://github.com/tfourneau/Harvester.git')
+              branch = os.environ.get('BRANCH', 'main')
+              
+              # Créer une sauvegarde
+              timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+              backup_dir = f"{app_dir}_backup_{timestamp}"
+              if os.path.exists(app_dir):
+                  logger.info(f"Sauvegarde vers {backup_dir}")
+                  shutil.copytree(app_dir, backup_dir)
+              
+              # Synchroniser avec le repo
+              tmp_dir = f"/tmp/harvester_tmp_{timestamp}"
+              logger.info(f"Clonage de {repo_url} (branche {branch})")
+              execute_command(["git", "clone", "-b", branch, repo_url, tmp_dir])
+              
+              # Créer le répertoire destination si nécessaire
+              if not os.path.exists(app_dir):
+                  os.makedirs(app_dir)
+              
+              # Synchroniser les fichiers
+              logger.info(f"Synchronisation vers {app_dir}")
+              for item in os.listdir(tmp_dir):
+                  if item == '.git':
+                      continue
+                  src = os.path.join(tmp_dir, item)
+                  dst = os.path.join(app_dir, item)
+                  if os.path.isdir(src):
+                      if os.path.exists(dst):
+                          shutil.rmtree(dst)
+                      shutil.copytree(src, dst)
+                  else:
+                      shutil.copy2(src, dst)
+              
+              # Nettoyer
+              shutil.rmtree(tmp_dir)
+              
+              # Redémarrer services
+              logger.info("Redémarrage des services")
+              harvester_script = os.path.join(app_dir, "run.py")
+              if os.path.exists(harvester_script):
+                  try:
+                      # Arrêter les processus existants
+                      execute_command(["pkill", "-f", "python.*run.py"])
+                  except:
+                      pass
+                  # Démarrer le service
+                  subprocess.Popen(["python3", harvester_script], 
+                                   cwd=app_dir,
+                                   stdout=open(os.path.join(app_dir, "harvester.log"), "a"),
+                                   stderr=subprocess.STDOUT)
+              
+              logger.info("Synchronisation terminée")
+          
+          if __name__ == "__main__":
+              sync_repo()
+          EOL
+          chmod +x sync_harvester.py
+      - name: Deploy to server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            mkdir -p ~/scripts
+            cat > ~/scripts/sync_harvester.py << 'EOL'
+            ${{ github.workspace }}/sync_harvester.py
+            EOL
+            chmod +x ~/scripts/sync_harvester.py
+            export APP_DIR=/opt/harvester
+            export REPO_URL=https://github.com/tfourneau/Harvester.git
+            export BRANCH=main
+            python3 ~/scripts/sync_harvester.py
