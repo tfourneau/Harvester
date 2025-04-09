@@ -613,15 +613,15 @@ class HarvesterApp:
 
     def save_probe_id(self, probe_id):
         try:
-            with open('./Services/probe_config.json', 'w') as f:
+            with open('../probe_config.json', 'w') as f:
                 json.dump({'probe_id': probe_id}, f)
         except Exception as e:
             logging.error(f"Erreur lors de la sauvegarde de l'ID de la sonde: {e}")
 
     def load_probe_id(self):
         try:
-            if os.path.exists('./Services/probe_config.json'):
-                with open('./Services/probe_config.json', 'r') as f:
+            if os.path.exists('../probe_config.json'):
+                with open('../probe_config.json', 'r') as f:
                     config = json.load(f)
                     probe_id = config.get('probe_id')
                     if probe_id:
@@ -680,96 +680,96 @@ class HarvesterApp:
         ttk.Button(btn_frame, text="Tester connexion", command=self.test_server_connection).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Annuler", command=config_window.destroy).pack(side=tk.LEFT, padx=5)
 
-   def update_application(self):
-    self.status_var.set("Mise à jour en cours...")
-    self.progress.start()
-    
-    def do_update():
-        try:
-            import subprocess
-            repo_dir = os.path.dirname(os.path.abspath(__file__))
-            repo_url = 'https://github.com/tfourneau/Harvester.git'
-            
-            self.update_text_widget("Vérification des mises à jour...\n")
-            
-            # Configuration de sécurité Git
-            subprocess.run(['git', 'config', '--global', 'safe.directory', repo_dir], 
-                        capture_output=True, text=True)
-            
-            if not os.path.exists(os.path.join(repo_dir, '.git')):
-                self.update_text_widget("Initialisation du dépôt git...\n")
-                git.Repo.init(repo_dir)
-                repo = git.Repo(repo_dir)
-                origin = repo.create_remote('origin', repo_url)
+    def update_application(self):
+        self.status_var.set("Mise à jour en cours...")
+        self.progress.start()
+        
+        def do_update():
+            try:
+                import subprocess
+                repo_dir = os.path.dirname(os.path.abspath(__file__))
+                repo_url = 'https://github.com/tfourneau/Harvester.git'
                 
-                # Sauvegarde des fichiers existants
-                self.update_text_widget("Sauvegarde des fichiers existants...\n")
-                backup_dir = os.path.join(repo_dir, 'backup_files')
-                os.makedirs(backup_dir, exist_ok=True)
-                for item in os.listdir(repo_dir):
-                    if item != '.git' and item != 'backup_files':
-                        src = os.path.join(repo_dir, item)
-                        dst = os.path.join(backup_dir, item)
-                        if os.path.isfile(src):
-                            shutil.copy2(src, dst)
+                self.update_text_widget("Vérification des mises à jour...\n")
                 
-                # Téléchargement initial
-                self.update_text_widget("Premier téléchargement du code source...\n")
-                origin.fetch()
+                # Configuration de sécurité Git
+                subprocess.run(['git', 'config', '--global', 'safe.directory', repo_dir], 
+                            capture_output=True, text=True)
                 
-                # Forcer le checkout en supprimant les fichiers conflictuels
-                for untracked_file in ['client.py', 'server.py']:
-                    file_path = os.path.join(repo_dir, untracked_file)
-                    if os.path.exists(file_path):
-                        shutil.move(file_path, os.path.join(backup_dir, untracked_file))
-                
-                # Checkout initial
-                repo.git.checkout('--track', 'origin/main')
-                self.update_text_widget("Installation initiale terminée.\n")
-            else:
-                repo = git.Repo(repo_dir)
-                origin = repo.remote('origin')
-                
-                # Déplacer les fichiers non suivis qui pourraient causer des conflits
-                untracked_files = repo.untracked_files
-                if untracked_files:
-                    self.update_text_widget(f"Déplacement des fichiers non suivis...\n")
+                if not os.path.exists(os.path.join(repo_dir, '.git')):
+                    self.update_text_widget("Initialisation du dépôt git...\n")
+                    git.Repo.init(repo_dir)
+                    repo = git.Repo(repo_dir)
+                    origin = repo.create_remote('origin', repo_url)
+                    
+                    # Sauvegarde des fichiers existants
+                    self.update_text_widget("Sauvegarde des fichiers existants...\n")
                     backup_dir = os.path.join(repo_dir, 'backup_files')
                     os.makedirs(backup_dir, exist_ok=True)
-                    for file in untracked_files:
-                        src = os.path.join(repo_dir, file)
-                        dst = os.path.join(backup_dir, file)
-                        os.makedirs(os.path.dirname(dst), exist_ok=True)
-                        shutil.move(src, dst)
-                
-                # Forcer la mise à jour en réinitialisant les modifications locales
-                self.update_text_widget("Réinitialisation des modifications locales...\n")
-                repo.git.reset('--hard')
-                
-                # Suite de la mise à jour
-                origin.fetch()
-                current_branch = repo.active_branch
-                if current_branch.name in [ref.remote_head for ref in origin.refs]:
-                    origin.pull()
-                    self.update_text_widget("Mise à jour terminée.\n")
-                    self.root.after(0, lambda: messagebox.showinfo(
-                        "Mise à jour terminée", 
-                        "L'application a été mise à jour. Veuillez la redémarrer."
-                    ))
-                else:
+                    for item in os.listdir(repo_dir):
+                        if item != '.git' and item != 'backup_files':
+                            src = os.path.join(repo_dir, item)
+                            dst = os.path.join(backup_dir, item)
+                            if os.path.isfile(src):
+                                shutil.copy2(src, dst)
+                    
+                    # Téléchargement initial
+                    self.update_text_widget("Premier téléchargement du code source...\n")
+                    origin.fetch()
+                    
+                    # Forcer le checkout en supprimant les fichiers conflictuels
+                    for untracked_file in ['client.py', 'server.py']:
+                        file_path = os.path.join(repo_dir, untracked_file)
+                        if os.path.exists(file_path):
+                            shutil.move(file_path, os.path.join(backup_dir, untracked_file))
+                    
+                    # Checkout initial
                     repo.git.checkout('--track', 'origin/main')
-                    self.update_text_widget("Branche principale configurée.\n")
+                    self.update_text_widget("Installation initiale terminée.\n")
+                else:
+                    repo = git.Repo(repo_dir)
+                    origin = repo.remote('origin')
+                    
+                    # Déplacer les fichiers non suivis qui pourraient causer des conflits
+                    untracked_files = repo.untracked_files
+                    if untracked_files:
+                        self.update_text_widget(f"Déplacement des fichiers non suivis...\n")
+                        backup_dir = os.path.join(repo_dir, 'backup_files')
+                        os.makedirs(backup_dir, exist_ok=True)
+                        for file in untracked_files:
+                            src = os.path.join(repo_dir, file)
+                            dst = os.path.join(backup_dir, file)
+                            os.makedirs(os.path.dirname(dst), exist_ok=True)
+                            shutil.move(src, dst)
+                    
+                    # Forcer la mise à jour en réinitialisant les modifications locales
+                    self.update_text_widget("Réinitialisation des modifications locales...\n")
+                    repo.git.reset('--hard')
+                    
+                    # Suite de la mise à jour
+                    origin.fetch()
+                    current_branch = repo.active_branch
+                    if current_branch.name in [ref.remote_head for ref in origin.refs]:
+                        origin.pull()
+                        self.update_text_widget("Mise à jour terminée.\n")
+                        self.root.after(0, lambda: messagebox.showinfo(
+                            "Mise à jour terminée", 
+                            "L'application a été mise à jour. Veuillez la redémarrer."
+                        ))
+                    else:
+                        repo.git.checkout('--track', 'origin/main')
+                        self.update_text_widget("Branche principale configurée.\n")
+            
+            except Exception as e:
+                self.update_text_widget(f"Erreur lors de la mise à jour: {e}\n")
+                logging.error(f"Erreur lors de la mise à jour: {e}")
+            finally:
+                self.root.after(0, lambda: self.status_var.set("Prêt"))
+                self.root.after(0, self.progress.stop)
         
-        except Exception as e:
-            self.update_text_widget(f"Erreur lors de la mise à jour: {e}\n")
-            logging.error(f"Erreur lors de la mise à jour: {e}")
-        finally:
-            self.root.after(0, lambda: self.status_var.set("Prêt"))
-            self.root.after(0, self.progress.stop)
-    
-    update_thread = threading.Thread(target=do_update)
-    update_thread.daemon = True
-    update_thread.start()
+        update_thread = threading.Thread(target=do_update)
+        update_thread.daemon = True
+        update_thread.start()
 
 
     def export_results(self):
@@ -919,4 +919,4 @@ if __name__ == "__main__":
         logging.critical(f"Erreur critique de l'application: {e}")
         messagebox.showerror("Erreur critique", f"Une erreur critique est survenue: {e}")
 
-# test 3
+# test 5
