@@ -919,4 +919,4 @@ if __name__ == "__main__":
         logging.critical(f"Erreur critique de l'application: {e}")
         messagebox.showerror("Erreur critique", f"Une erreur critique est survenue: {e}")
 
-# test
+# test 2
