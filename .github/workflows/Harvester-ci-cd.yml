@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Create and deploy sync script
+      - name: Create sync script
         run: |
           # Créer un script Python simplifié pour la synchronisation
           cat > sync_harvester.py << 'EOL'
@@ -54,25 +54,17 @@ jobs:
               repo_url = 'https://github.com/tfourneau/Harvester.git'
               branch = 'main'
               
-              # Synchronisation avec le repo
-              tmp_dir = '/tmp/harvester_tmp'
-              execute_command(["git", "clone", "-b", branch, repo_url, tmp_dir])
+              # Vérifier si le dépôt existe déjà, sinon le cloner
+              if not os.path.exists(app_dir):
+                  logger.info(f"Clonage du dépôt {repo_url}")
+                  execute_command(["git", "clone", "-b", branch, repo_url, app_dir])
+              else:
+                  logger.info(f"Le dépôt existe déjà, mise à jour avec git pull")
+                  execute_command(["git", "-C", app_dir, "pull", "origin", branch])
               
               # Synchronisation des fichiers
-              for item in os.listdir(tmp_dir):
-                  if item != '.git':
-                      src = os.path.join(tmp_dir, item)
-                      dst = os.path.join(app_dir, item)
-                      if os.path.isdir(src):
-                          shutil.rmtree(dst, ignore_errors=True)
-                          shutil.copytree(src, dst)
-                      else:
-                          shutil.copy2(src, dst)
-              
-              shutil.rmtree(tmp_dir)  # Nettoyage temporaire
-              
-              # Démarrer le service
-              subprocess.Popen(["python3", os.path.join(app_dir, "run.py")], cwd=app_dir)
+              logger.info("Synchronisation des fichiers")
+              subprocess.run(["python3", os.path.join(app_dir, "run.py")], cwd=app_dir)
               logger.info("Synchronisation terminée")
 
           if __name__ == "__main__":
@@ -81,8 +73,6 @@ jobs:
 
           chmod +x sync_harvester.py
           
-          # Déployer le script sur le serveur
-          scp -i ${{ secrets.SSH_PRIVATE_KEY }} sync_harvester.py ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/sync_harvester.py
-
-          # Exécuter le script sur le serveur distant via SSH
-          ssh -i ${{ secrets.SSH_PRIVATE_KEY }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "python3 /home/${{ secrets.DEPLOY_USER }}/sync_harvester.py"
+          # Exécuter le script de synchronisation directement sur le serveur
+          # Nous allons supposer que ce script est exécuté directement sur le serveur ou localement via un runner capable d'y accéder
+          python3 sync_harvester.py
