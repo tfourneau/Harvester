@@ -263,7 +263,7 @@ class HarvesterApp:
         scan_thread.daemon = True
         scan_thread.start()
 
-       def run_network_scan(self, ip, netmask, scan_type):
+    def run_network_scan(self, ip, netmask, scan_type):
         try:
             # Mise à jour de l'interface
             self.update_text_widget("Démarrage du scan réseau...\n")
